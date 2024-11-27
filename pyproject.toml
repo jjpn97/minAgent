@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "minagent"
+version = "0.1.0"
+description = "An LLM agent with basic tools in a Docker container"
+authors = ["Your Name <you@example.com>"]
+license = "n"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pytest = "^8.3.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pyright]
+typeCheckingMode = "standard"
+exclude = ["minagent/agent.py"]
