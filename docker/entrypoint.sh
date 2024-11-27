@@ -1,4 +1,4 @@
 #!/bin/bash
-echo '/' > ~/.last_dir
+echo '/home/agent' > ~/.last_dir
 declare -p > ~/.last_env
 exec "$@"

@@ -1,19 +1,49 @@
 import asyncio
-from typing import Optional
+from dataclasses import dataclass
 
 
+@dataclass
 class ExecResult:
-    def __init__(self, success: bool, stdout: str, stderr: str):
-        self.success = success
-        self.stdout = stdout
-        self.stderr = stderr
-
-    def __repr__(self):
-        return f"ExecResult(success={self.success}, stdout={self.stdout}, stderr={self.stderr})"
+    exit_code: int | None
+    stdout: str
+    stderr: str
 
 
-async def docker_exec(
-    container_name: str, cmd: list, timeout: Optional[int] = 30
+def bash(container_name: str = "agent_container", timeout: int | None = None):
+    async def execute(command: str) -> str:
+        full_cmd = f"cd $( cat ~/.last_dir ) >/dev/null; source ~/.last_env 2> /dev/null && {command}; pwd > ~/.last_dir; declare -p > ~/.last_env"  # stateful bash
+        result = await _docker_exec(
+            container_name=container_name,
+            cmd=["bash", "-c", full_cmd],
+            timeout=timeout,
+        )
+
+        output = ""
+        if result.stderr:
+            output = f"{result.stderr}\n"
+        return f"{output}{result.stdout}"
+
+    return execute
+
+
+def python(container_name: str = "agent_container", timeout: int | None = None):
+    async def execute(script: str) -> str:
+        result = await _docker_exec(
+            container_name=container_name,
+            cmd=["python3", script],
+            timeout=timeout,
+        )
+
+        output = ""
+        if result.stderr:
+            output = f"{result.stderr}\n"
+        return f"{output}{result.stdout}"
+
+    return execute
+
+
+async def _docker_exec(
+    container_name: str, cmd: list, timeout: int | None = 30
 ) -> ExecResult:
     """
     Execute a command in a running container using docker exec
@@ -36,47 +66,10 @@ async def docker_exec(
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
 
         return ExecResult(
-            success=(process.returncode == 0),
+            exit_code=process.returncode,
             stdout=stdout.decode().strip(),
             stderr=stderr.decode().strip(),
         )
 
     except asyncio.TimeoutError:
         raise TimeoutError(f"Command timed out after {timeout} seconds")
-
-
-def bash(timeout: int | None = None):
-    async def execute(cmd: str) -> str:
-        full_cmd = f" cd $( cat ~/.last_dir ) >/dev/null; source ~/.last_env 2> /dev/null && {cmd}; pwd > ~/.last_dir; declare -p > ~/.last_env"  # stateful bash
-        result = await docker_exec(
-            container_name="agent_container",
-            cmd=["bash", "-c", full_cmd],
-            timeout=timeout,
-        )
-        # return output (including stderr if any)
-        output = ""
-        if result.stderr:
-            output = f"{result.stderr}\n"
-        return f"{output}{result.stdout}"
-
-    return execute
-
-
-def python(timeout: int | None = None):
-    async def execute(code: str) -> str:
-        result = await docker_exec(
-            container_name="agent_container",
-            cmd=["python3"],
-            timeout=timeout,
-        )
-        # return output (including stderr if any)
-        output = ""
-        if result.stderr:
-            output = f"{result.stderr}\n"
-        return f"{output}{result.stdout}"
-
-    return execute
-
-
-if __name__ == "__main__":
-    pass

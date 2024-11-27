@@ -1,23 +1,27 @@
 # docker/Dockerfile
 FROM python:3.9-slim
 
-WORKDIR /home
+# Create system directories first
+RUN mkdir -p /home/agent /opt/scripts
 
-# Copy files from docker directory
-COPY docker/requirements.txt /home/requirements.txt
-COPY docker/entrypoint.sh /home/entrypoint.sh
+# Copy files to appropriate locations
+COPY docker/requirements.txt /opt/scripts/requirements.txt
+COPY docker/entrypoint.sh /opt/scripts/entrypoint.sh
 
 # Fix permissions and install requirements
-RUN chmod +x /home/entrypoint.sh && \
-    pip install --no-cache-dir -r /home/requirements.txt
+RUN chmod +x /opt/scripts/entrypoint.sh && \
+    pip install --no-cache-dir -r /opt/scripts/requirements.txt && \
+    chmod 755 /opt/scripts && \
+    chmod 755 /opt/scripts/entrypoint.sh && \
+    chown -R root:root /opt/scripts
 
 # Create a non-root user and setup directories
-RUN useradd -m -r -s /bin/bash agent_user && \
-    mkdir -p /app && \
-    chown -R agent_user:agent_user /app /home
+RUN useradd -m -r -s /bin/bash agent && \
+    chown -R agent:agent /home/agent
 
-USER agent_user
+WORKDIR /home/agent
 
-# Set the entrypoint with full path
-ENTRYPOINT ["/home/entrypoint.sh"]
+USER agent
+
+ENTRYPOINT ["/opt/scripts/entrypoint.sh"]
 CMD ["/bin/bash"]

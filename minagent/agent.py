@@ -1,59 +1,139 @@
-# pyright: ignore-file -- Using dict format for OpenAI messages which is valid but causes type errors
-
-import subprocess
-from openai import OpenAI
+from openai import AsyncOpenAI
+import json
 
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
+from tools import bash, python
+
+BASH_FUNCTION = {
+    "type": "function",
+    "function": {
+        "name": "bash",
+        "description": "Run commands in a bash shell.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The command to run in a bash shell.",
+                }
+            },
+            "required": ["command"],
+        },
+    },
+}
+
+PYTHON_FUNCTION = {
+    "type": "function",
+    "function": {
+        "name": "python",
+        "description": "Run a Python script.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                    "description": "The path to the Python script to run, e.g ./script.py.",
+                }
+            },
+            "required": ["script"],
+        },
+    },
+}
+
+TOOLS = [BASH_FUNCTION, PYTHON_FUNCTION]
+
+
+name2tool = {
+    "bash": bash,
+    "python": python,
+}
+
 
 class Agent:
-    MESSAGE_LIMIT = 10
+    MESSAGE_LIMIT = 5
 
-    def __init__(self, model: str = "gpt-3.5-turbo", temperature: float = 1.0):
+    def __init__(
+        self,
+        container_name: str,
+        system_prompt: str,
+        model: str = "gpt-4o-mini",
+        temperature: float = 1.0,
+        tools: list[str] = ["bash", "python"],
+    ):
         self.model = model
         self.history = [
             {
                 "role": "system",
-                "content": "You are a helpful AI assistant. Use 'ls' and then stop.",
+                "content": system_prompt,
             }
         ]
         self.temperature = temperature
         self.messages = 0
 
-        self.client = OpenAI()
+        self.client = AsyncOpenAI()
+        self.tools = [tool for tool in TOOLS if tool["function"]["name"] in tools]
+        print(self.tools)
+        self.container = container_name
 
-    def get_response(self) -> ChatCompletionMessage:
-        response = self.client.chat.completions.create(
-            model=self.model, messages=self.history, temperature=self.temperature
+        self.bash_tool = bash(container_name)
+        self.python_tool = python(container_name)
+
+    async def get_response(self) -> ChatCompletionMessage:
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=self.history,
+            temperature=self.temperature,
+            tools=self.tools,
+            tool_choice="auto",
         )
         return response.choices[0].message
 
-    def reply(self, msg: str):
-        self.history.append({"role": "user", "content": msg})
-        while True:
-            response = self.get_response()
-            self.history.append(response)
-            if "<bash>" in response.content:
-                self.execute(response.content)
-            else:
-                return response.content
+    async def step(self, response: ChatCompletionMessage):
+        if response.tool_calls:
+            tool_outputs = []
+            for tool_call in response.tool_calls:
+                self.history.append(
+                    {
+                        "role": "assistant",
+                        "content": response.content,
+                        "tool_calls": response.tool_calls,
+                    }
+                )
 
+                tool_result = await self.execute_tool(
+                    tool_call.function.name, json.loads(tool_call.function.arguments)
+                )
+
+                tool_outputs.append(
+                    {"tool_call_id": tool_call.id, "output": tool_result}
+                )
+
+            # Add the assistant's response and tool outputs to the history
+            self.history.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_outputs[0]["tool_call_id"],
+                    "content": tool_outputs[0]["output"],
+                }
+            )
+        else:
+            self.history.append({"role": "assistant", "content": response.content})
+            return response.content
+
+    async def rollout(self, msg: str):
+        self.history.append({"role": "user", "content": msg})
+
+        while True:
+            response = await self.get_response()
+            await self.step(response)
             self.messages += 1
             if self.messages >= self.MESSAGE_LIMIT:
                 break
 
-    def execute(self, response_str: str):
-        """Execute the command in the response and add the output to the history"""
-        cmd = response_str.split("<bash>")[1].split("</bash>")[0]
-        print("Executing:", cmd)
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        output = f"Output: \n{result.stdout}"
-        if result.stderr:
-            output += f"\nError captured:\n{result.stderr}"
-        print("Output", output)
-        self.history.append({"role": "user", "content": output})
-
-
-if __name__ == "__main__":
-    agent = Agent()
-    agent.reply("Complete the task.")
+    async def execute_tool(self, tool_name: str, tool_args: str):
+        tool = name2tool[tool_name](self.container)
+        print(f"Executing {tool_name}:", tool_args)
+        result = await tool(**tool_args)
+        output = f"Output: \n{result}"
+        return output

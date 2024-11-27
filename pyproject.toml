@@ -15,6 +15,9 @@ pytest = "^8.3.3"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.ruff]
+exclude = ["minagent/task.py"]
+
 [tool.pyright]
 typeCheckingMode = "standard"
-exclude = ["minagent/agent.py"]
+exclude = ["minagent/agent.py", "minagent/task.py"]
