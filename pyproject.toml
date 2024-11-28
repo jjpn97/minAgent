@@ -8,16 +8,25 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-pytest = "^8.3.3"
+openai = "^1.55.3"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+ruff = "^0.8.0"
+pyright = "^1.1.389"
+pre-commit = "^4.0.1"
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff.lint]
+ignore = ["E203", "E501", "E731"]
+extend-select = ["UP", "TID", "I", "F", "E", "ARG"]
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.ruff]
-exclude = ["minagent/task.py"]
-
 [tool.pyright]
 typeCheckingMode = "standard"
-exclude = ["minagent/agent.py", "minagent/task.py"]
+exclude = ["minagent/agent.py"]

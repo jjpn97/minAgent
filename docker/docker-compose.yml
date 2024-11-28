@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: minagent:latest
+    environment:
+      - AGENT_ID={{.Task.Slot}}  
+    stdin_open: true
+    tty: true

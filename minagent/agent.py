@@ -1,8 +1,9 @@
-from openai import AsyncOpenAI
 import json
+from asyncio import Semaphore
+from typing import Literal
 
+from openai import AsyncOpenAI
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
-
 from tools import bash, python
 
 BASH_FUNCTION = {
@@ -59,7 +60,8 @@ class Agent:
         system_prompt: str,
         model: str = "gpt-4o-mini",
         temperature: float = 1.0,
-        tools: list[str] = ["bash", "python"],
+        tools: list[Literal["bash", "python"]] = ["bash", "python"],
+        semaphore: Semaphore | None = None,
     ):
         self.model = model
         self.history = [
@@ -72,24 +74,25 @@ class Agent:
         self.messages = 0
 
         self.client = AsyncOpenAI()
+        self.semaphore = semaphore or Semaphore(3)
         self.tools = [tool for tool in TOOLS if tool["function"]["name"] in tools]
-        print(self.tools)
         self.container = container_name
 
         self.bash_tool = bash(container_name)
         self.python_tool = python(container_name)
 
     async def get_response(self) -> ChatCompletionMessage:
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=self.history,
-            temperature=self.temperature,
-            tools=self.tools,
-            tool_choice="auto",
-        )
-        return response.choices[0].message
+        async with self.semaphore:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=self.history,
+                temperature=self.temperature,
+                tools=self.tools,
+                tool_choice="auto",
+            )
+            return response.choices[0].message
 
-    async def step(self, response: ChatCompletionMessage):
+    async def step(self, response: ChatCompletionMessage) -> None:
         if response.tool_calls:
             tool_outputs = []
             for tool_call in response.tool_calls:
@@ -119,7 +122,6 @@ class Agent:
             )
         else:
             self.history.append({"role": "assistant", "content": response.content})
-            return response.content
 
     async def rollout(self, msg: str):
         self.history.append({"role": "user", "content": msg})
@@ -127,13 +129,16 @@ class Agent:
         while True:
             response = await self.get_response()
             await self.step(response)
+
             self.messages += 1
             if self.messages >= self.MESSAGE_LIMIT:
                 break
+        return self.history
 
-    async def execute_tool(self, tool_name: str, tool_args: str):
+    async def execute_tool(self, tool_name: str, tool_args: dict[str, str]) -> str:
         tool = name2tool[tool_name](self.container)
         print(f"Executing {tool_name}:", tool_args)
-        result = await tool(**tool_args)
-        output = f"Output: \n{result}"
-        return output
+        async with self.semaphore:
+            result = await tool(**tool_args)
+            output = f"Output: \n{result}"
+            return output
