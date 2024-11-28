@@ -4,7 +4,7 @@ A minimal framework for evaluating LLM agents in isolated Docker environments wi
 
 ## Overview
 
-minAgent provides Docker containers with (interactive) Bash and Python for testing LLM agents on simple tasks. It uses async/await for efficient concurrent evaluation and is based on [UK AISI's Inspect framework](https://github.com/UKGovernmentBEIS/inspect_ai).
+minAgent runs LLM agents in Docker containers with access to (interactive) Bash and Python for evals on simple tasks involving tool-use. It uses async/await for efficient concurrent evaluation and is based on [UK AISI's Inspect framework](https://github.com/UKGovernmentBEIS/inspect_ai).
 
 This was mainly for my understanding of (some of) UK AISI's codebase, particularly Docker.
 
