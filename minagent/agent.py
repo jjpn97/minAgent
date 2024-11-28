@@ -4,7 +4,8 @@ from typing import Literal
 
 from openai import AsyncOpenAI
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from tools import bash, python
+
+from .tools import bash, python
 
 BASH_FUNCTION = {
     "type": "function",

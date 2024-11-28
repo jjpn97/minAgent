@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal
 
-from agent import Agent
-from tools import ExecResult, docker_subprocess_exec
+from .agent import Agent
+from .tools import ExecResult, docker_subprocess_exec
 
 
 @dataclass
